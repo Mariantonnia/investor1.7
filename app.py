@@ -19,52 +19,36 @@ llm = ChatGroq(
 # Sistema de diálogo mejorado
 class ESGConversationManager:
     def __init__(self):
-        self.states = {
-            "start": {
-                "message": "¡Hola! Soy tu asesor ESG personal. Analizaremos tu perfil de inversión mediante algunas noticias relevantes. ¿Estás listo para comenzar?",
-                "transition": "show_news_1"
-            },
-            "show_news_1": {
-                "news": "Repsol entre las 50 empresas con mayor responsabilidad histórica en el calentamiento global",
-                "transition": "ask_opinion_1"
-            },
-            "ask_opinion_1": {
-                "question": "¿Qué opinas sobre esta noticia?",
-                "transition": "analyze_response_1"
-            },
-            "analyze_response_1": {
-                "follow_up": "¿Cómo valoras el compromiso ambiental de las empresas energéticas?",
-                "transition": "ask_measures_1"
-            },
-            "ask_measures_1": {
-                "question": "¿Qué medidas crees que deberían tomar para mejorar su impacto?",
-                "transition": "show_news_2"
-            },
-            "show_news_2": {
-                "news": "Amancio Ortega crea un fondo de 100 millones para afectados por inundaciones",
-                "transition": "ask_opinion_2"
-            },
-            "ask_opinion_2": {
-                "question": "¿Qué te parece esta iniciativa?",
-                "transition": "analyze_response_2"
-            },
-            "analyze_response_2": {
-                "follow_up": "¿Cómo valoras la responsabilidad social de los grandes fortunas?",
-                "transition": "final_question"
-            },
-            "final_question": {
-                "question": "¿Crees que este tipo de acciones deberían ser más comunes?",
-                "transition": "show_results"
-            }
-        }
-        self.current_state = "start"
+        self.news_items = [
+            "Repsol entre las 50 empresas con mayor responsabilidad histórica en el calentamiento global",
+            "Amancio Ortega crea un fondo de 100 millones para afectados por inundaciones"
+        ]
+        self.current_news_index = 0
+        self.questions_for_news = [
+            ["¿Qué opinas sobre esta noticia?", "¿Cómo valoras el compromiso ambiental de las empresas energéticas?", "¿Qué medidas crees que deberían tomar para mejorar su impacto?"],
+            ["¿Qué te parece esta iniciativa?", "¿Cómo valoras la responsabilidad social de los grandes fortunas?", "¿Crees que este tipo de acciones deberían ser más comunes?"]
+        ]
+        self.current_question_index = 0
         self.scores = {"Ambiental": 0, "Social": 0, "Gobernanza": 0, "Riesgo": 0}
+        self.state = "start"  # start -> show_news -> ask_question -> analyze -> next_question_or_news -> results
 
-    def get_current_step(self):
-        return self.states.get(self.current_state, {})
+    def get_current_news(self):
+        return self.news_items[self.current_news_index]
     
-    def move_to_next_state(self):
-        self.current_state = self.states[self.current_state].get("transition", "show_results")
+    def get_current_question(self):
+        return self.questions_for_news[self.current_news_index][self.current_question_index]
+    
+    def move_to_next_question(self):
+        self.current_question_index += 1
+        if self.current_question_index >= len(self.questions_for_news[self.current_news_index]):
+            self.current_question_index = 0
+            self.current_news_index += 1
+            if self.current_news_index >= len(self.news_items):
+                self.state = "results"
+            else:
+                self.state = "show_news"
+        else:
+            self.state = "ask_question"
 
 # Plantilla de análisis mejorada
 analysis_template = """
@@ -94,12 +78,12 @@ st.set_page_config(page_title="💬 Asesor ESG Conversacional", layout="wide")
 st.title("💬 Asesor ESG Conversacional")
 st.caption("Diálogo inteligente para analizar tu perfil de inversión responsable")
 
-# Inicialización COMPLETA del estado
+# Inicialización completa del estado
 if "conversation" not in st.session_state:
     st.session_state.conversation = ESGConversationManager()
     st.session_state.chat_history = []
-    st.session_state.waiting_for_input = False
-    st.session_state.news_responses = []  # Inicialización añadida aquí
+    st.session_state.news_responses = []
+    st.session_state.waiting_for_response = False
 
 # Mostrar historial de chat
 for msg in st.session_state.chat_history:
@@ -109,62 +93,60 @@ for msg in st.session_state.chat_history:
 
 # Manejo de la conversación
 cm = st.session_state.conversation
-current_step = cm.get_current_step()
 
-if not st.session_state.waiting_for_input:
-    if current_step:
-        if "message" in current_step:
-            # Mensaje inicial
-            with st.chat_message("analyst", avatar="🤖"):
-                st.write(current_step["message"])
-            st.session_state.chat_history.append({
-                "role": "analyst",
-                "content": current_step["message"]
-            })
-            cm.move_to_next_state()
-            st.session_state.waiting_for_input = True
-        
-        elif "news" in current_step:
-            # Mostrar noticia
-            with st.chat_message("analyst", avatar="🤖"):
-                st.markdown(f"📰 **Noticia:** {current_step['news']}")
-            st.session_state.chat_history.append({
-                "role": "analyst",
-                "content": f"📰 **Noticia:** {current_step['news']}"
-            })
-            cm.move_to_next_state()
-            st.rerun()
-        
-        elif "question" in current_step:
-            # Hacer pregunta
-            with st.chat_message("analyst", avatar="🤖"):
-                st.write(current_step["question"])
-            st.session_state.chat_history.append({
-                "role": "analyst",
-                "content": current_step["question"]
-            })
-            st.session_state.waiting_for_input = True
+if cm.state == "start":
+    with st.chat_message("analyst", avatar="🤖"):
+        st.write("¡Hola! Soy tu asesor ESG personal. Analizaremos tu perfil de inversión mediante algunas noticias relevantes. ¿Estás listo para comenzar?")
+    st.session_state.chat_history.append({
+        "role": "analyst",
+        "content": "¡Hola! Soy tu asesor ESG personal. Analizaremos tu perfil de inversión mediante algunas noticias relevantes. ¿Estás listo para comenzar?"
+    })
+    cm.state = "waiting_start_confirmation"
+    st.session_state.waiting_for_response = True
+
+elif cm.state == "show_news":
+    news = cm.get_current_news()
+    with st.chat_message("analyst", avatar="🤖"):
+        st.markdown(f"📰 **Noticia:** {news}")
+    st.session_state.chat_history.append({
+        "role": "analyst",
+        "content": f"📰 **Noticia:** {news}"
+    })
+    cm.state = "ask_question"
+    st.rerun()
+
+elif cm.state == "ask_question":
+    question = cm.get_current_question()
+    with st.chat_message("analyst", avatar="🤖"):
+        st.write(question)
+    st.session_state.chat_history.append({
+        "role": "analyst",
+        "content": question
+    })
+    cm.state = "waiting_response"
+    st.session_state.waiting_for_response = True
 
 # Procesar input del usuario
 if user_input := st.chat_input("Escribe tu respuesta..."):
-    # Guardar respuesta del usuario
     st.session_state.chat_history.append({
         "role": "user",
         "content": user_input
     })
-    st.session_state.news_responses.append(user_input)  # Ahora sí existe
-    st.session_state.waiting_for_input = False
+    st.session_state.news_responses.append(user_input)
+    st.session_state.waiting_for_response = False
     
-    # Solo analizar respuestas a preguntas, no a noticias
-    if "question" in cm.get_current_step() or "follow_up" in cm.get_current_step():
-        # Preparar contexto para el análisis
+    if cm.state == "waiting_start_confirmation":
+        cm.state = "show_news"
+        st.rerun()
+    
+    elif cm.state == "waiting_response":
+        # Analizar respuesta
         context = {
-            "news": next((step["news"] for step in cm.states.values() if "news" in step and step["news"] in "\n".join([m["content"] for m in st.session_state.chat_history[-3:]])), ""),
+            "news": cm.get_current_news(),
             "user_input": user_input,
             "history": "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-3:]])
         }
         
-        # Generar respuesta analizada
         with st.spinner("Analizando tu respuesta..."):
             try:
                 prompt = PromptTemplate(template=analysis_template, input_variables=["news", "user_input", "history"])
@@ -190,15 +172,16 @@ if user_input := st.chat_input("Escribe tu respuesta..."):
                     "content": response
                 })
                 
+                # Mover a siguiente pregunta o noticia
+                cm.move_to_next_question()
+                st.rerun()
+                
             except Exception as e:
                 st.error(f"Error al generar respuesta: {str(e)}")
                 st.stop()
-    
-    cm.move_to_next_state()
-    st.rerun()
 
 # Mostrar resultados finales
-if cm.current_state == "show_results":
+if cm.state == "results":
     st.subheader("📊 Tu Perfil ESG Completo")
     
     # Gráfico de radar

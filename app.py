@@ -10,10 +10,13 @@ load_dotenv()
 
 # Configuración avanzada del LLM
 os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+
 llm = ChatGroq(
-    model="mixtral-8x7b-32768",  # Modelo más potente para conversaciones
-    temperature=0.8,  # Más creatividad en respuestas
-    max_tokens=1024,
+    model="gemma2-9b-it",
+    temperature=0,
+    max_tokens=None,
+    timeout=None,
+    max_retries=2,
 )
 
 # Datos de contexto ESG

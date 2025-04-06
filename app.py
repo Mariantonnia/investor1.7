@@ -59,7 +59,6 @@ class ESGConversationManager:
         }
         self.current_state = "start"
         self.scores = {"Ambiental": 0, "Social": 0, "Gobernanza": 0, "Riesgo": 0}
-        self.news_responses = []
 
     def get_current_step(self):
         return self.states.get(self.current_state, {})
@@ -95,11 +94,12 @@ st.set_page_config(page_title="💬 Asesor ESG Conversacional", layout="wide")
 st.title("💬 Asesor ESG Conversacional")
 st.caption("Diálogo inteligente para analizar tu perfil de inversión responsable")
 
-# Inicialización de estado
+# Inicialización COMPLETA del estado
 if "conversation" not in st.session_state:
     st.session_state.conversation = ESGConversationManager()
     st.session_state.chat_history = []
     st.session_state.waiting_for_input = False
+    st.session_state.news_responses = []  # Inicialización añadida aquí
 
 # Mostrar historial de chat
 for msg in st.session_state.chat_history:
@@ -152,7 +152,7 @@ if user_input := st.chat_input("Escribe tu respuesta..."):
         "role": "user",
         "content": user_input
     })
-    st.session_state.news_responses.append(user_input)
+    st.session_state.news_responses.append(user_input)  # Ahora sí existe
     st.session_state.waiting_for_input = False
     
     # Solo analizar respuestas a preguntas, no a noticias
@@ -203,7 +203,7 @@ if cm.current_state == "show_results":
     
     # Gráfico de radar
     categories = list(cm.scores.keys())
-    values = [min(100, score) for score in cm.scores.values()]  # Asegurar máximo 100
+    values = [min(100, score) for score in cm.scores.values()]
     
     fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
     ax.plot(categories + [categories[0]], values + [values[0]], color='teal', linewidth=2)

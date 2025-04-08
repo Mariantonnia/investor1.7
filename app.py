@@ -44,6 +44,7 @@ Clasifica la preocupación principal en una de estas categorías:
 - Riesgo
 
 Si la respuesta es vaga o insuficiente, genera una pregunta de seguimiento para profundizar en su opinión. Devuelve SOLO LA PREGUNTA.
+Si la respuesta es clara, responde con una breve síntesis y una nueva pregunta para fomentar la conversación.
 """
 
 prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
@@ -87,11 +88,13 @@ if st.session_state.contador < len(noticias):
         st.session_state.reacciones.append(user_input)
         
         analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
-        if "INSUFICIENTE" in analisis_reaccion:
-            pregunta_seguimiento = analisis_reaccion.replace("INSUFICIENTE", "").strip()
-            with st.chat_message("bot", avatar="🤖"):
-                st.write(pregunta_seguimiento)
-            st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_seguimiento})
+        
+        with st.chat_message("bot", avatar="🤖"):
+            st.write(analisis_reaccion)
+        st.session_state.historial.append({"tipo": "bot", "contenido": analisis_reaccion})
+        
+        if "?" in analisis_reaccion:
+            pass  # Se espera respuesta del usuario antes de continuar
         else:
             st.session_state.contador += 1
             st.rerun()

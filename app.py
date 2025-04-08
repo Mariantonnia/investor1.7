@@ -1,221 +1,127 @@
 import streamlit as st
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from langchain import LLMChain, PromptTemplate
 from langchain_groq import ChatGroq
 import os
+import re
+import json
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 
 load_dotenv()
 
-# Configuración del LLM
+# Configurar el modelo LLM
 os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
 llm = ChatGroq(
-    model_name="llama3-70b-8192",
-    temperature=0.7,
-    max_tokens=1024,
+    model="gemma2-9b-it",
+    temperature=0,
+    max_tokens=None,
+    timeout=None,
+    max_retries=2,
 )
 
-# Sistema de diálogo mejorado
-class ESGConversationManager:
-    def __init__(self):
-        self.news_items = [
-            "Repsol entre las 50 empresas con mayor responsabilidad histórica en el calentamiento global",
-            "Amancio Ortega crea un fondo de 100 millones para afectados por inundaciones"
-        ]
-        self.current_news_index = 0
-        self.questions_for_news = [
-            ["¿Qué opinas sobre esta noticia?", "¿Cómo valoras el compromiso ambiental de las empresas energéticas?", "¿Qué medidas crees que deberían tomar para mejorar su impacto?"],
-            ["¿Qué te parece esta iniciativa?", "¿Cómo valoras la responsabilidad social de los grandes fortunas?", "¿Crees que este tipo de acciones deberían ser más comunes?"]
-        ]
-        self.current_question_index = 0
-        self.scores = {"Ambiental": 0, "Social": 0, "Gobernanza": 0, "Riesgo": 0}
-        self.state = "start"  # start -> show_news -> ask_question -> analyze -> next_question_or_news -> results
+noticias = [
+    "Repsol, entre las 50 empresas que más responsabilidad histórica tienen en el calentamiento global",
+    "Amancio Ortega crea un fondo de 100 millones de euros para los afectados de la dana",
+    "Freshly Cosmetics despide a 52 empleados en Reus, el 18% de la plantilla",
+    "Wall Street y los mercados globales caen ante la incertidumbre por la guerra comercial y el temor a una recesión",
+    "El mercado de criptomonedas se desploma: Bitcoin cae a 80.000 dólares, las altcoins se hunden en medio de una frenética liquidación",
+    "Granada retrasa seis meses el inicio de la Zona de Bajas Emisiones, previsto hasta ahora para abril",
+    "McDonald's donará a la Fundación Ronald McDonald todas las ganancias por ventas del Big Mac del 6 de diciembre",
+    "El Gobierno autoriza a altos cargos públicos a irse a Indra, Escribano, CEOE, Barceló, Iberdrola o Airbus",
+    "Las aportaciones a los planes de pensiones caen 10.000 millones en los últimos cuatro años",
+]
 
-    def get_current_news(self):
-        return self.news_items[self.current_news_index]
-    
-    def get_current_question(self):
-        return self.questions_for_news[self.current_news_index][self.current_question_index]
-    
-    def move_to_next_question(self):
-        self.current_question_index += 1
-        if self.current_question_index >= len(self.questions_for_news[self.current_news_index]):
-            self.current_question_index = 0
-            self.current_news_index += 1
-            if self.current_news_index >= len(self.news_items):
-                self.state = "results"
-            else:
-                self.state = "show_news"
-        else:
-            self.state = "ask_question"
+plantilla_reaccion = """
+Reacción del usuario: {reaccion}
 
-# Plantilla de análisis mejorada
-analysis_template = """
-Como analista ESG experto, analiza esta conversación:
+Analiza el sentimiento y la preocupación expresada en relación con la noticia.
+Clasifica la preocupación principal en una de estas categorías:
+- Ambiental
+- Social
+- Gobernanza
+- Riesgo
 
-Noticia: {news}
-Respuesta del usuario: {user_input}
-Contexto previo: {history}
-
-Instrucciones:
-1. Identifica la categoría ESG principal (Ambiental, Social, Gobernanza o Riesgo)
-2. Analiza el sentimiento (positivo/neutral/negativo)
-3. Genera una respuesta natural que:
-   - Reconozca el comentario del usuario
-   - Profundice en aspectos no mencionados
-   - Haga solo UNA pregunta relevante
-   - Mantenga un tono profesional pero cercano
-
-Ejemplo de formato:
-[Análisis breve] [Pregunta de seguimiento]
-
-No repitas la noticia en tu respuesta.
+Si la respuesta es vaga o insuficiente, genera una pregunta de seguimiento para profundizar en su opinión. Devuelve SOLO LA PREGUNTA.
 """
 
-# Configuración de Streamlit
-st.set_page_config(page_title="💬 Asesor ESG Conversacional", layout="wide")
-st.title("💬 Asesor ESG Conversacional")
-st.caption("Diálogo inteligente para analizar tu perfil de inversión responsable")
+prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
+cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
 
-# Inicialización completa del estado
-if "conversation" not in st.session_state:
-    st.session_state.conversation = ESGConversationManager()
-    st.session_state.chat_history = []
-    st.session_state.news_responses = []
-    st.session_state.waiting_for_response = False
+plantilla_perfil = """
+Basado en las siguientes respuestas del usuario: {analisis}
 
-# Mostrar historial de chat
-for msg in st.session_state.chat_history:
-    avatar = "🤖" if msg["role"] == "analyst" else "👤"
-    with st.chat_message(msg["role"], avatar=avatar):
-        st.write(msg["content"])
+Genera un perfil de su interés en temas ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo.
 
-# Manejo de la conversación
-cm = st.session_state.conversation
+Devuelve una puntuación de 0 a 100 para cada categoría:
+Ambiental: [puntuación]
+Social: [puntuación]
+Gobernanza: [puntuación]
+Riesgo: [puntuación]
+"""
 
-if cm.state == "start":
-    with st.chat_message("analyst", avatar="🤖"):
-        st.write("¡Hola! Soy tu asesor ESG personal. Analizaremos tu perfil de inversión mediante algunas noticias relevantes. ¿Estás listo para comenzar?")
-    st.session_state.chat_history.append({
-        "role": "analyst",
-        "content": "¡Hola! Soy tu asesor ESG personal. Analizaremos tu perfil de inversión mediante algunas noticias relevantes. ¿Estás listo para comenzar?"
-    })
-    cm.state = "waiting_start_confirmation"
-    st.session_state.waiting_for_response = True
+prompt_perfil = PromptTemplate(template=plantilla_perfil, input_variables=["analisis"])
+cadena_perfil = LLMChain(llm=llm, prompt=prompt_perfil)
 
-elif cm.state == "show_news":
-    news = cm.get_current_news()
-    with st.chat_message("analyst", avatar="🤖"):
-        st.markdown(f"📰 **Noticia:** {news}")
-    st.session_state.chat_history.append({
-        "role": "analyst",
-        "content": f"📰 **Noticia:** {news}"
-    })
-    cm.state = "ask_question"
-    st.rerun()
+if "historial" not in st.session_state:
+    st.session_state.historial = []
+    st.session_state.contador = 0
+    st.session_state.reacciones = []
 
-elif cm.state == "ask_question":
-    question = cm.get_current_question()
-    with st.chat_message("analyst", avatar="🤖"):
-        st.write(question)
-    st.session_state.chat_history.append({
-        "role": "analyst",
-        "content": question
-    })
-    cm.state = "waiting_response"
-    st.session_state.waiting_for_response = True
+st.title("Chatbot de Noticias e Inversión")
 
-# Procesar input del usuario
-if user_input := st.chat_input("Escribe tu respuesta..."):
-    st.session_state.chat_history.append({
-        "role": "user",
-        "content": user_input
-    })
-    st.session_state.news_responses.append(user_input)
-    st.session_state.waiting_for_response = False
+for mensaje in st.session_state.historial:
+    with st.chat_message(mensaje["tipo"]):
+        st.write(mensaje["contenido"])
+
+if st.session_state.contador < len(noticias):
+    noticia = noticias[st.session_state.contador]
+    with st.chat_message("bot", avatar="🤖"):
+        st.write(f"¿Qué opinas sobre esta noticia? {noticia}")
+    st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
     
-    if cm.state == "waiting_start_confirmation":
-        cm.state = "show_news"
-        st.rerun()
-    
-    elif cm.state == "waiting_response":
-        # Analizar respuesta
-        context = {
-            "news": cm.get_current_news(),
-            "user_input": user_input,
-            "history": "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-3:]])
-        }
+    user_input = st.chat_input("Escribe tu opinión...")
+    if user_input:
+        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+        st.session_state.reacciones.append(user_input)
         
-        with st.spinner("Analizando tu respuesta..."):
-            try:
-                prompt = PromptTemplate(template=analysis_template, input_variables=["news", "user_input", "history"])
-                chain = LLMChain(llm=llm, prompt=prompt)
-                response = chain.run(**context)
-                
-                # Actualizar puntuaciones
-                response_lower = response.lower()
-                if "ambiental" in response_lower:
-                    cm.scores["Ambiental"] += 15
-                elif "social" in response_lower:
-                    cm.scores["Social"] += 15
-                elif "gobernanza" in response_lower:
-                    cm.scores["Gobernanza"] += 15
-                elif "riesgo" in response_lower:
-                    cm.scores["Riesgo"] += 10
-                
-                # Mostrar respuesta
-                with st.chat_message("analyst", avatar="🤖"):
-                    st.write(response)
-                st.session_state.chat_history.append({
-                    "role": "analyst",
-                    "content": response
-                })
-                
-                # Mover a siguiente pregunta o noticia
-                cm.move_to_next_question()
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Error al generar respuesta: {str(e)}")
-                st.stop()
+        analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
+        if "INSUFICIENTE" in analisis_reaccion:
+            pregunta_seguimiento = analisis_reaccion.replace("INSUFICIENTE", "").strip()
+            with st.chat_message("bot", avatar="🤖"):
+                st.write(pregunta_seguimiento)
+            st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_seguimiento})
+        else:
+            st.session_state.contador += 1
+            st.rerun()
+else:
+    perfil = cadena_perfil.run(analisis="\n".join(st.session_state.reacciones))
+    with st.chat_message("bot", avatar="🤖"):
+        st.write(f"**Perfil del usuario:** {perfil}")
+    st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del usuario:** {perfil}"})
+    
+    puntuaciones = {
+        "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
+        "Social": int(re.search(r"Social: (\d+)", perfil).group(1)),
+        "Gobernanza": int(re.search(r"Gobernanza: (\d+)", perfil).group(1)),
+        "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
+    }
 
-# Mostrar resultados finales
-if cm.state == "results":
-    st.subheader("📊 Tu Perfil ESG Completo")
-    
-    # Gráfico de radar
-    categories = list(cm.scores.keys())
-    values = [min(100, score) for score in cm.scores.values()]
-    
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
-    ax.plot(categories + [categories[0]], values + [values[0]], color='teal', linewidth=2)
-    ax.fill(categories + [categories[0]], values + [values[0]], color='teal', alpha=0.25)
-    ax.set_xticks([0, 1, 2, 3])
-    ax.set_xticklabels(categories, fontsize=12)
-    ax.set_yticks([25, 50, 75, 100])
-    ax.set_ylim(0, 100)
-    ax.grid(True)
+    fig, ax = plt.subplots()
+    ax.bar(puntuaciones.keys(), puntuaciones.values())
+    ax.set_ylabel("Puntuación (0-100)")
+    ax.set_title("Perfil del Usuario")
     st.pyplot(fig)
     
-    # Explicación detallada
-    st.markdown("""
-    ## 📝 Análisis de tu perfil ESG:
-    
-    **Preocupación Ambiental:** {}/100 - {}
-    
-    **Sensibilidad Social:** {}/100 - {}
-    
-    **Exigencia en Gobernanza:** {}/100 - {}
-    
-    **Tolerancia al Riesgo:** {}/100 - {}
-    """.format(
-        cm.scores["Ambiental"],
-        "Muy alta" if cm.scores["Ambiental"] > 70 else "Moderada" if cm.scores["Ambiental"] > 40 else "Baja",
-        cm.scores["Social"],
-        "Muy alta" if cm.scores["Social"] > 70 else "Media" if cm.scores["Social"] > 40 else "Baja",
-        cm.scores["Gobernanza"],
-        "Muy exigente" if cm.scores["Gobernanza"] > 70 else "Moderada" if cm.scores["Gobernanza"] > 40 else "Flexible",
-        cm.scores["Riesgo"],
-        "Muy conservador" if cm.scores["Riesgo"] > 70 else "Moderado" if cm.scores["Riesgo"] > 40 else "Arriesgado"
-    ))
+    try:
+        creds_json = json.loads(st.secrets["gcp_service_account"])
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open('BBDD_RESPUESTAS').sheet1
+        fila = st.session_state.reacciones[:] + list(puntuaciones.values())
+        sheet.append_row(fila)
+        st.success("Respuestas y perfil guardados en Google Sheets.")
+    except Exception as e:
+        st.error(f"Error al guardar en Google Sheets: {e}")

@@ -49,7 +49,7 @@ for mensaje in st.session_state.historial:
 if st.session_state.contador < len(noticias):
     if not st.session_state.mostrada_noticia:
         noticia = noticias[st.session_state.contador]
-        with st.chat_message("bot", avatar=""):
+        with st.chat_message("bot"): # Eliminado avatar=""
             st.write(f"¿Qué nivel de preocupación tienes sobre esta noticia? {noticia}")
         st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
         st.session_state.mostrada_noticia = True
@@ -79,7 +79,7 @@ else:
         "Riesgo": st.session_state.reacciones[3] if len(st.session_state.reacciones) > 3 else 0,
     }
 
-    with st.chat_message("bot", avatar=""):
+    with st.chat_message("bot"): # Eliminado avatar=""
         st.write(f"**Perfil del inversor:** {perfil}")
     st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del inversor:** {perfil}"})
 

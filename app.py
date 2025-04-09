@@ -49,11 +49,14 @@ for mensaje in st.session_state.historial:
 if st.session_state.contador < len(noticias):
     if not st.session_state.mostrada_noticia:
         noticia = noticias[st.session_state.contador]
-        with st.chat_message("bot", avatar="🤖"):
+        with st.chat_message("bot", avatar=""):
             st.write(f"¿Qué nivel de preocupación tienes sobre esta noticia? {noticia}")
         st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
         st.session_state.mostrada_noticia = True
-    
+
+    # Reiniciar la barra deslizante antes de mostrarla
+    st.session_state.preocupacion = 50
+
     preocupacion = st.slider(
         "Nivel de preocupación (0: Nada preocupado - 100: Muy preocupado)",
         min_value=0,
@@ -61,13 +64,12 @@ if st.session_state.contador < len(noticias):
         step=1,
         value=st.session_state.preocupacion  # Establecer al valor guardado en el estado
     )
-    
+
     if st.button("Enviar respuesta"):
         st.session_state.reacciones.append(preocupacion)
         st.session_state.historial.append({"tipo": "user", "contenido": f"Preocupación: {preocupacion}"})
         st.session_state.contador += 1
         st.session_state.mostrada_noticia = False
-        st.session_state.preocupacion = 50  # Reiniciar la barra antes de recargar
         st.rerun()
 else:
     perfil = {
@@ -76,25 +78,25 @@ else:
         "Gobernanza": st.session_state.reacciones[2] if len(st.session_state.reacciones) > 2 else 0,
         "Riesgo": st.session_state.reacciones[3] if len(st.session_state.reacciones) > 3 else 0,
     }
-    
-    with st.chat_message("bot", avatar="🤖"):
+
+    with st.chat_message("bot", avatar=""):
         st.write(f"**Perfil del inversor:** {perfil}")
     st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del inversor:** {perfil}"})
-    
+
     # Crear gráfico de barras
     fig, ax = plt.subplots()
     ax.bar(perfil.keys(), perfil.values())
     ax.set_ylabel("Puntuación (0-100)")
     ax.set_title("Perfil del Inversor")
     st.pyplot(fig)
-    
+
     try:
         creds_json_str = st.secrets["gcp_service_account"]
         creds_json = json.loads(creds_json_str)
     except Exception as e:
         st.error(f"Error al cargar las credenciales: {e}")
         st.stop()
-    
+
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
     client = gspread.authorize(creds)

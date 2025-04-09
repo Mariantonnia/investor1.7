@@ -38,6 +38,7 @@ if "historial" not in st.session_state:
     st.session_state.contador = 0
     st.session_state.reacciones = []
     st.session_state.mostrada_noticia = False
+    st.session_state.preocupacion = 50  # Valor por defecto para la barra deslizante
 
 st.title("Chatbot de Análisis de Sentimiento")
 
@@ -58,6 +59,7 @@ if st.session_state.contador < len(noticias):
         min_value=0,
         max_value=100,
         step=1,
+        value=st.session_state.preocupacion  # Restablecer al valor predeterminado
     )
 
     if st.button("Enviar respuesta"):
@@ -65,6 +67,7 @@ if st.session_state.contador < len(noticias):
         st.session_state.reacciones.append(preocupacion)
         st.session_state.contador += 1
         st.session_state.mostrada_noticia = False
+        st.session_state.preocupacion = 50  # Reiniciar la barra
         st.rerun()
 else:
     perfil = {

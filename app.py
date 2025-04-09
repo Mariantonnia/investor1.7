@@ -33,98 +33,69 @@ noticias = [
     "Las aportaciones a los planes de pensiones caen 10.000 millones en los últimos cuatro años",
 ]
 
-plantilla_reaccion = """
-Reacción del usuario: {reaccion}
-
-Analiza el sentimiento y la preocupación expresada en relación con la noticia.
-Clasifica la preocupación principal en una de estas categorías:
-- Ambiental
-- Social
-- Gobernanza
-- Riesgo
-
-Si la respuesta es vaga o insuficiente, genera una pregunta de seguimiento para profundizar en su opinión. Devuelve SOLO LA PREGUNTA.
-Si la respuesta es clara, responde con una breve síntesis y una nueva pregunta para fomentar la conversación.
-"""
-
-prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
-cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
-
-plantilla_perfil = """
-Basado en las siguientes respuestas del usuario: {analisis}
-
-Genera un perfil de su interés en temas ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo.
-
-Devuelve una puntuación de 0 a 100 para cada categoría:
-Ambiental: [puntuación]
-Social: [puntuación]
-Gobernanza: [puntuación]
-Riesgo: [puntuación]
-"""
-
-prompt_perfil = PromptTemplate(template=plantilla_perfil, input_variables=["analisis"])
-cadena_perfil = LLMChain(llm=llm, prompt=prompt_perfil)
-
 if "historial" not in st.session_state:
     st.session_state.historial = []
     st.session_state.contador = 0
     st.session_state.reacciones = []
+    st.session_state.mostrada_noticia = False
 
-st.title("Chatbot de Noticias e Inversión")
+st.title("Chatbot de Análisis de Sentimiento")
 
 for mensaje in st.session_state.historial:
     with st.chat_message(mensaje["tipo"]):
         st.write(mensaje["contenido"])
 
 if st.session_state.contador < len(noticias):
-    noticia = noticias[st.session_state.contador]
-    with st.chat_message("bot", avatar="🤖"):
-        st.write(f"¿Qué opinas sobre esta noticia? {noticia}")
-    st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
-    
-    user_input = st.chat_input("Escribe tu opinión...")
-    if user_input:
-        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
-        st.session_state.reacciones.append(user_input)
-        
-        analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
-        
+    if not st.session_state.mostrada_noticia:
+        noticia = noticias[st.session_state.contador]
         with st.chat_message("bot", avatar="🤖"):
-            st.write(analisis_reaccion)
-        st.session_state.historial.append({"tipo": "bot", "contenido": analisis_reaccion})
-        
-        if "?" in analisis_reaccion:
-            pass  # Se espera respuesta del usuario antes de continuar
-        else:
-            st.session_state.contador += 1
-            st.rerun()
-else:
-    perfil = cadena_perfil.run(analisis="\n".join(st.session_state.reacciones))
-    with st.chat_message("bot", avatar="🤖"):
-        st.write(f"**Perfil del usuario:** {perfil}")
-    st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del usuario:** {perfil}"})
+            st.write(f"¿Qué nivel de preocupación tienes sobre esta noticia? {noticia}")
+        st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
+        st.session_state.mostrada_noticia = True
     
-    puntuaciones = {
-        "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
-        "Social": int(re.search(r"Social: (\d+)", perfil).group(1)),
-        "Gobernanza": int(re.search(r"Gobernanza: (\d+)", perfil).group(1)),
-        "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
-    }
+    preocupacion = st.slider(
+        "Nivel de preocupación (0: Nada preocupado - 100: Muy preocupado)",
+        min_value=0,
+        max_value=100,
+        step=1,
+    )
 
+    if st.button("Enviar respuesta"):
+        st.session_state.historial.append({"tipo": "user", "contenido": f"Preocupación: {preocupacion}"})
+        st.session_state.reacciones.append(preocupacion)
+        st.session_state.contador += 1
+        st.session_state.mostrada_noticia = False
+        st.rerun()
+else:
+    perfil = {
+        "Ambiental": st.session_state.reacciones[0] if len(st.session_state.reacciones) > 0 else 0,
+        "Social": st.session_state.reacciones[1] if len(st.session_state.reacciones) > 1 else 0,
+        "Gobernanza": st.session_state.reacciones[2] if len(st.session_state.reacciones) > 2 else 0,
+        "Riesgo": st.session_state.reacciones[3] if len(st.session_state.reacciones) > 3 else 0,
+    }
+    
+    with st.chat_message("bot", avatar="🤖"):
+        st.write(f"**Perfil del inversor:** {perfil}")
+    st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del inversor:** {perfil}"})
+    
+    # Crear gráfico de barras
     fig, ax = plt.subplots()
-    ax.bar(puntuaciones.keys(), puntuaciones.values())
+    ax.bar(perfil.keys(), perfil.values())
     ax.set_ylabel("Puntuación (0-100)")
-    ax.set_title("Perfil del Usuario")
+    ax.set_title("Perfil del Inversor")
     st.pyplot(fig)
     
     try:
-        creds_json = json.loads(st.secrets["gcp_service_account"])
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open('BBDD_RESPUESTAS').sheet1
-        fila = st.session_state.reacciones[:] + list(puntuaciones.values())
-        sheet.append_row(fila)
-        st.success("Respuestas y perfil guardados en Google Sheets.")
+        creds_json_str = st.secrets["gcp_service_account"]
+        creds_json = json.loads(creds_json_str)
     except Exception as e:
-        st.error(f"Error al guardar en Google Sheets: {e}")
+        st.error(f"Error al cargar las credenciales: {e}")
+        st.stop()
+    
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open('BBDD_RESPUESTAS').sheet1
+    fila = st.session_state.reacciones[:]
+    sheet.append_row(fila)
+    st.success("Respuestas y perfil guardados en Google Sheets en una misma fila.")

@@ -39,6 +39,7 @@ if "historial" not in st.session_state:
     st.session_state.reacciones = []
     st.session_state.mostrada_noticia = False
     st.session_state.preocupacion = 50  # Valor por defecto para la barra deslizante
+    st.session_state.slider_key = 0 #añadido
 
 st.title("Chatbot de Análisis de Sentimiento")
 
@@ -49,20 +50,20 @@ for mensaje in st.session_state.historial:
 if st.session_state.contador < len(noticias):
     if not st.session_state.mostrada_noticia:
         noticia = noticias[st.session_state.contador]
-        with st.chat_message("bot"): # Eliminado avatar=""
+        with st.chat_message("bot"):
             st.write(f"¿Qué nivel de preocupación tienes sobre esta noticia? {noticia}")
         st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
         st.session_state.mostrada_noticia = True
-
-    # Reiniciar la barra deslizante antes de mostrarla
-    st.session_state.preocupacion = 50
+        st.session_state.preocupacion = 50 #aseguramos que se reinicie aquí.
+        st.session_state.slider_key += 1 #añadido
 
     preocupacion = st.slider(
         "Nivel de preocupación (0: Nada preocupado - 100: Muy preocupado)",
         min_value=0,
         max_value=100,
         step=1,
-        value=st.session_state.preocupacion  # Establecer al valor guardado en el estado
+        value=st.session_state.preocupacion,
+        key=st.session_state.slider_key #añadido
     )
 
     if st.button("Enviar respuesta"):
@@ -79,7 +80,7 @@ else:
         "Riesgo": st.session_state.reacciones[3] if len(st.session_state.reacciones) > 3 else 0,
     }
 
-    with st.chat_message("bot"): # Eliminado avatar=""
+    with st.chat_message("bot"):
         st.write(f"**Perfil del inversor:** {perfil}")
     st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del inversor:** {perfil}"})
 

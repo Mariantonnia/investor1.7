@@ -53,18 +53,19 @@ if st.session_state.contador < len(noticias):
             st.write(f"¿Qué nivel de preocupación tienes sobre esta noticia? {noticia}")
         st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
         st.session_state.mostrada_noticia = True
+        st.session_state.preocupacion = 50  # Reiniciar la barra antes de mostrarla
     
     preocupacion = st.slider(
         "Nivel de preocupación (0: Nada preocupado - 100: Muy preocupado)",
         min_value=0,
         max_value=100,
         step=1,
-        value=st.session_state.preocupacion  # Restablecer al valor predeterminado
+        value=st.session_state.preocupacion  # Establecer al valor predeterminado
     )
-
+    
     if st.button("Enviar respuesta"):
-        st.session_state.historial.append({"tipo": "user", "contenido": f"Preocupación: {preocupacion}"})
         st.session_state.reacciones.append(preocupacion)
+        st.session_state.historial.append({"tipo": "user", "contenido": f"Preocupación: {preocupacion}"})
         st.session_state.contador += 1
         st.session_state.mostrada_noticia = False
         st.session_state.preocupacion = 50  # Reiniciar la barra
